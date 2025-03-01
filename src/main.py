@@ -1,6 +1,6 @@
 import time
 import1=time.time()
-from playlist.manager import read_csv, count_genres_in_labels, Playlist
+from playlist.manager import read_csv, count_genres_in_labels, Playlist, append_scalers
 print(f"Time to import manager: {time.time()-import1}")
 from pathlib import Path
 import2=time.time()
@@ -44,7 +44,6 @@ def main():
 
     # Init scaler, KMeans
     scaler= MinMaxScaler(feature_range=(0, 1))
-    scaler_datetime= MinMaxScaler(feature_range=(0, 1))
     kmeans = KMeans(n_clusters=n_clusters,random_state=SEED)
 
     # Process data
@@ -54,9 +53,6 @@ def main():
     print(f"Time to process: {time_process-start_time}")
     labeled_data.to_csv("out/test_full_labeled.csv", sep=";",decimal=",",index=False)
     
-    added_at=pandas.to_datetime(labeled_data["Added At"])
-    added_timestamps=(added_at.astype('int64') /10**9).to_frame()
-    scaler_datetime.fit(added_timestamps)
 
     ## Loop through labels and push to Spotify
     # Genre stats
@@ -73,8 +69,12 @@ def main():
     playlist_names=make_names(label_to_genres,3)
     # param=400 # cluster approx. size
     sorted_playlists=[]
-    playlist_dict=[]
-    sort_values=values+["Added At"]
+    playlist_dict=[]    
+    
+    scaler_extra= MinMaxScaler(feature_range=(0, 1))
+    extra_values=["Added Timestamp"]
+    scaler_extra.fit(labeled_data[extra_values])
+    sort_values=values+extra_values
     for i in range(n_clusters):
         # Process each labelled song
         playlist_cluster=labeled_data.loc[labeled_data["Label 2"]==i].copy().reset_index()
@@ -82,11 +82,11 @@ def main():
         if len(playlist_cluster)<2:
             print(f"{i} is <2.")
             continue
-        mean=playlist_cluster[values].mean(axis=0)
-        # latest=playlist_cluster.loc[np.argmax(playlist_cluster["Added At"]),values]
-        print(type(max(playlist_cluster["Added At"])))
-        cluster_first=scaler.transform(mean.to_frame().transpose())
-        cluster_data=scaler.transform(playlist_cluster[values])
+        # mean=playlist_cluster[values].mean(axis=0)
+        index_latest=np.argmax(playlist_cluster["Added At"])
+        latest=playlist_cluster.loc[index_latest,:].to_frame().transpose()
+        cluster_first=append_scalers(latest,[values,extra_values],[scaler,scaler_extra])
+        cluster_data=append_scalers(playlist_cluster,[values,extra_values],[scaler,scaler_extra])
         ith_playlist=sort_closest(playlist_cluster,cluster_first,cluster_data)
         # ith_playlist=sort_playlist(playlist_cluster,n,values,-1)
         sorted_playlists.append(ith_playlist)

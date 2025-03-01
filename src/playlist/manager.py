@@ -558,3 +558,14 @@ def rotate_until(order,cluster):
 # %%
 def get_release_year(data):
     return [int(date[0:4]) if type(date)==str else date for date in data["Release Date"]]
+
+def append_scalers(data,list_of_values:list,scalers:list):
+    scaled_data=None
+    for values,scaler in zip(list_of_values,scalers):
+            scaled_values=scaler.transform(data[values])
+            if scaled_data is None:
+                scaled_data=scaled_values
+            else:
+                scaled_data=np.concatenate([scaled_data,scaled_values],1)
+
+    return scaled_data
