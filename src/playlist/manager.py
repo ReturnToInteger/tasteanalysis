@@ -503,9 +503,10 @@ def split_genres(data):
     return [genre for genre in data['Genres'].str.split(',')]
 
 # %%
-def read_csv(filename,append=True,year=True,genres=True,timestamp=True):
+def read_csv(filename,append=True,year=True,genres=True,timestamp=True,unique=True):
     # read the data
     data = pandas.read_csv(filename)
+    print(len(data),"is in file.")
     if append: 
         data["Track ID"]="https://open.spotify.com/track/"+data["Track ID"]
     if year:
@@ -514,6 +515,9 @@ def read_csv(filename,append=True,year=True,genres=True,timestamp=True):
         data["Genres"]=split_genres(data)
     if timestamp:
         data["Added Timestamp"]=pandas.to_datetime(data["Added At"]).astype('int64') /10**9
+    if unique:
+        data=data.drop_duplicates(subset=["Track Name","Artist Name(s)"],ignore_index=True)
+    print(len(data),"loaded.")
     return data
 
 # %%

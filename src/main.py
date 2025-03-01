@@ -109,7 +109,7 @@ def main():
 
     # Write whole thing to file
     sorted_data=pandas.concat(sorted_playlists)
-    # sorted_data.to_csv("out/raw/test_full_sorted.csv", sep=";",decimal=",",index=False)
+    sorted_data.to_csv("out/raw/test_full_sorted.csv", sep=";",decimal=",",index=False)
 
     # Sync with Spotify 
     spotify.sync_playlists(playlist_dict)
