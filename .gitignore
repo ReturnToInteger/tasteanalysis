@@ -1,0 +1,9 @@
+*.xlsx
+notebooks/*
+.ipynb_checkpoints/
+**/__pycache__/
+.cache
+log.txt
+playlists.json
+.env
+out/
