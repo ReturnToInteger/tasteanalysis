@@ -36,7 +36,7 @@ def main():
 
     # Read data (dld from exportify)
     current_dir= Path(__file__).parent
-    data_path=current_dir.parent / "source" / "raw" / "liked_songs_0224.csv"
+    data_path=current_dir.parent / "source" / "liked_songs_0224.csv"
     start_time=time.time()
     playlist=read_csv(data_path)
     time_read=time.time()
