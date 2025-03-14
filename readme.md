@@ -1,3 +1,3 @@
 # Spotify playlist handler
 
-Just me handling my Spotify playlists lol
+Categorize huge playlists based on data, create smooth transitions within your playlist.
