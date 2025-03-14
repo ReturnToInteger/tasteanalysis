@@ -59,7 +59,7 @@ The script will:
 ## Notes
 
  - Playlist descriptions are built from genre tags.
- - You can tweak n_clusters, feature weights, or sorting strategy as you experiment.
+ - You can tweak n_clusters, which features to include, or sorting strategy as you experiment.
  - The code includes timing logs to track performance.
 
 ## Why?
