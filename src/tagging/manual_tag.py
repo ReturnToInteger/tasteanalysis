@@ -271,10 +271,10 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
             index_list.append(int(idx))
             # Finds the column with the highest mean across the selected genre rows in p_matrix.
             p_new=p_matrix.loc[genre].copy().mean(axis=0)
-            # row_values=np.reshape(data_row[values].to_numpy(),(1,-1))
+            row_values=np.reshape(data_row[values].to_numpy(),(1,-1)).astype(np.float64)
             # print(np.shape(row_values))
-            # print(cdist(np.array(kmeans.cluster_centers_),np.reshape(row_values,(1,-1))))
-            p_new[label]+=w_song*np.mean(p_new)
+            label_fuzzy=cdist(centroids,row_values)
+            p_new=p_new+w_song*label_fuzzy[:,0]/sum(label_fuzzy)
             
             label_list.append(p_new.argmax())
         else:
