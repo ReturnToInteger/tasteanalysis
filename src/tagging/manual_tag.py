@@ -154,7 +154,12 @@ def preprocess(data: pandas.DataFrame):
     values=[]
 
     numeric_columns = data.select_dtypes(include=np.number).columns
-    print(numeric_columns)    
+    print(numeric_columns)
+
+    if "Duration (ms)" in numeric_columns:
+        data["Duration (ms) nonscaled"]=data["Duration (ms)"]
+    if "Tempo" in numeric_columns:
+        data["Tempo nonscaled"]=data["Tempo"]
     
     # Scale data stats
     scaler= MinMaxScaler(feature_range=(0, 1))
@@ -183,7 +188,7 @@ def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,n_clusters,se
 
 
     ## dealing with songs from the results
-    labeled_data,nan_data=train_songs(data,p_matrix,values,kmeans)
+    labeled_data=train_songs(data,p_matrix,values,kmeans)
     return labeled_data, scaler, kmeans
 
 # %%
@@ -249,11 +254,11 @@ def group_genres_by_labeL(most_common):
 # ### Calc the best matching cluster for each song from data
 # The crust of the algorithm
 def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
-    w_song=1.0 #weight of song label
+    w_song=0 #weight of song label
     # 1. Assigns the most relevant label (column with the highest sum) to each index where the genre exists.
     label_list=[]
     index_list=[]
-    nan_index=[]
+    nan_list=[]
     print(f"Shape of p: {np.shape(p_matrix)}")
     centroids=np.array(kmeans.cluster_centers_)
     # print(f"Shape of centroids: {np.shape(centroids)}")
@@ -266,38 +271,41 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
             print("Something is not ok.")
             pass
         
+        row_values=np.reshape(data_row[values].to_numpy(),(1,-1)).astype(np.float64)
+        label_fuzzy=cdist(centroids,row_values)
+        p_new=w_song*label_fuzzy[:,0]/sum(label_fuzzy)
         # If genre exists
         if type(genre)==list:
-            index_list.append(int(idx))
             # Finds the column with the highest mean across the selected genre rows in p_matrix.
-            p_new=p_matrix.loc[genre].copy().mean(axis=0)
-            row_values=np.reshape(data_row[values].to_numpy(),(1,-1)).astype(np.float64)
-            # print(np.shape(row_values))
-            label_fuzzy=cdist(centroids,row_values)
-            p_new=p_new+w_song*label_fuzzy[:,0]/sum(label_fuzzy)
-            
-            label_list.append(p_new.argmax())
+            p_new=p_new+p_matrix.loc[genre].copy().mean(axis=0)
+            index_list.append(idx)
+
         else:
-            nan_index.append(idx)
+            nan_list.append(idx)
 
-    data.loc[index_list,"Label 2"]=label_list
+        label_list.append(p_new)
 
-    # 2. Compute centroids from known labels
+    label_list=np.array(label_list)
+    data.loc[index_list,"Label 2"]=np.argmax(label_list[index_list,:],1)
 
     group_label=data.groupby("Label 2")
     centroids_manual=group_label[values].mean()
+    keys=np.array(list(group_label.groups.keys())).astype(int)
+    print(keys)
 
-    # 3. Handle NaN values
-    nan_data=data.loc[nan_index].copy()
-    values_manual=nan_data.loc[:,values]
+    rows=data.loc[nan_list,values]
+    p_new=np.zeros_like(centroids[:,0])
+    for idx,row in rows.iterrows():
+        label_fuzzy=cdist(centroids_manual,np.reshape(row,(1,-1)))
+        p_new[keys]=label_fuzzy[:,0]
+        label_list[idx]+=p_new/sum(p_new)
 
-    ### Assign to closest
-    nan_data["Label 2"]=np.argmin(cdist(values_manual,centroids_manual),axis=1)
+    data.loc[nan_list,"Label 2"]=np.argmax(label_list[nan_list,:],1)
 
-    labeled_data=pandas.concat([data.dropna(subset="Label 2"), nan_data])
-    print(f"{len(data)} -> {len(labeled_data)}")
 
-    return labeled_data, nan_data
+    print(f"Invalid Label: {data['Label 2'].isna().sum()}")
+
+    return data
 
 
 
