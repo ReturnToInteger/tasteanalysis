@@ -32,6 +32,10 @@ def sort_closest(cluster,mean_stats_scaled,cluster_data_scaled):
         data=np.array(cluster_data_scaled)
     except:
         raise ValueError("cluster_data_scaled has to be an array or list, not ", type(cluster_data_scaled))
+    try:
+        mean_stats_scaled=np.array(mean_stats_scaled)
+    except:
+        raise ValueError("mean_stats_scaled has to be an array or list, not ", type(mean_stats_scaled))
     current=np.mean(mean_stats_scaled,0).reshape(1,-1)
     indexes=[]
     while len(indexes)<len(data):

@@ -150,19 +150,28 @@ def drop_below_tresh(grouped, i, genres_common):
 # %%
 ## WORKFLOW
 
-def preprocess(data: pandas.DataFrame,values: list,scaler:MinMaxScaler,kmeans:KMeans):
-    # explode along genres
-    df=explode_genre(data)
-    # train kmeans and scaler for songs
-    scaler,kmeans=kmeans_train(data[values],scaler,kmeans)
-    return df, scaler, kmeans
+def preprocess(data: pandas.DataFrame):
+    values=[]
 
-def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,kmeans:KMeans,n_clusters):
-    # explode song data and train kmeans
-    genre_df,scaler,kmeans=preprocess(data,values,scaler,kmeans)
-    # transform scaler and predict kmeans for GENRES!!!
+    numeric_columns = data.select_dtypes(include=np.number).columns
+    print(numeric_columns)    
+    
+    # Scale data stats
+    scaler= MinMaxScaler(feature_range=(0, 1))
+    stats_scaled=scaler.fit_transform(data[numeric_columns])
+    # and replace
+    data[numeric_columns]=stats_scaled
+    return data, scaler
+
+def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,n_clusters,seed):
+    # Cluster
+    kmeans = KMeans(n_clusters=n_clusters,random_state=seed)
+    kmeans.fit(data[values])
+
+    # explode song data based on genres
+    genre_df=explode_genre(data)
     genre_stats=genre_df[values]
-    labels=kmeans_scale_predict(genre_stats,scaler,kmeans)
+    labels=kmeans.predict(genre_stats)
     # from genres get p_matrix 
     assert len(labels) == len(genre_stats), "Mismatch in genre labels"
     genre_labels_sorted=sorted(list(tuple(zip(genre_stats.index,labels))),key=lambda x : x[1])
@@ -174,7 +183,7 @@ def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,kmeans:KMeans
 
 
     ## dealing with songs from the results
-    labeled_data,nan_data=train_songs(data,p_matrix,values,kmeans,scaler)
+    labeled_data,nan_data=train_songs(data,p_matrix,values,kmeans)
     return labeled_data, scaler, kmeans
 
 # %%
@@ -239,13 +248,16 @@ def group_genres_by_labeL(most_common):
 # %%
 # ### Calc the best matching cluster for each song from data
 # The crust of the algorithm
-def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans,scaler:MinMaxScaler):
+def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
     w_song=1.0 #weight of song label
     # 1. Assigns the most relevant label (column with the highest sum) to each index where the genre exists.
     label_list=[]
     index_list=[]
     nan_index=[]
     print(f"Shape of p: {np.shape(p_matrix)}")
+    centroids=np.array(kmeans.cluster_centers_)
+    # print(f"Shape of centroids: {np.shape(centroids)}")
+
     for idx,data_row in data.iterrows():
         genre=data_row["Genres"]
         try:
@@ -257,12 +269,12 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans,scaler:MinMa
         # If genre exists
         if type(genre)==list:
             index_list.append(int(idx))
-            # Finds the column with the highest sum across the selected genre rows in p_matrix.
-            try:
-                p_new=p_matrix.loc[genre].copy().sum(axis=0)
-                p_new[label]+=w_song*np.mean(p_new)
-            except:
-                raise ValueError("Something went wrong with p_new", p_new)
+            # Finds the column with the highest mean across the selected genre rows in p_matrix.
+            p_new=p_matrix.loc[genre].copy().mean(axis=0)
+            # row_values=np.reshape(data_row[values].to_numpy(),(1,-1))
+            # print(np.shape(row_values))
+            # print(cdist(np.array(kmeans.cluster_centers_),np.reshape(row_values,(1,-1))))
+            p_new[label]+=w_song*np.mean(p_new)
             
             label_list.append(p_new.argmax())
         else:
@@ -273,11 +285,11 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans,scaler:MinMa
     # 2. Compute centroids from known labels
 
     group_label=data.groupby("Label 2")
-    centroids_manual=scaler.transform(group_label[values].mean())
+    centroids_manual=group_label[values].mean()
 
     # 3. Handle NaN values
     nan_data=data.loc[nan_index].copy()
-    values_manual=scaler.transform(nan_data.loc[:,values])
+    values_manual=nan_data.loc[:,values]
 
     ### Assign to closest
     nan_data["Label 2"]=np.argmin(cdist(values_manual,centroids_manual),axis=1)

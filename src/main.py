@@ -1,24 +1,24 @@
-import time
-import1=time.time()
-from playlist.manager import read_csv, count_genres_in_labels, Playlist, append_scalers
-print(f"Time to import manager: {time.time()-import1}")
-from pathlib import Path
-import2=time.time()
-from tagging.manual_tag import process,make_names, sort_playlist
-print(f"Time to import tagging: {time.time()-import2}")
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import MinMaxScaler
-from api.spotify import SpotifyManager
-import pandas
-from recommendation.recommender import sort_distances, sort_closest
-import numpy as np
-import os
-os.environ["PYDEVD_DISABLE_QT_SUPPORT"] = "1"
-from dotenv import load_dotenv
-
 def main():
+    import time
+    import1=time.time()
+    from playlist.manager import read_csv, count_genres_in_labels, Playlist, append_scalers
+    print(f"Time to import manager: {time.time()-import1}")
+    from pathlib import Path
+    import2=time.time()
+    from tagging.manual_tag import preprocess, process,make_names, sort_playlist
+    print(f"Time to import tagging: {time.time()-import2}")
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import MinMaxScaler
+    from api.spotify import SpotifyManager
+    import pandas
+    from recommendation.recommender import sort_distances, sort_closest
+    import numpy as np
+    import os
+    from dotenv import load_dotenv
+
+
     load_dotenv()
-    SEED=42
+    SEED=40
     CLIENT_ID = os.getenv('CLIENT_ID')
     CLIENT_SECRET = os.getenv('CLIENT_SECRET')
     REDIRECT_URI = os.getenv('REDIRECT_URI')  # This must match your Spotify Developer settings
@@ -42,13 +42,11 @@ def main():
     time_read=time.time()
     print(f"Time to read: {time_read-start_time}")
 
-    # Init scaler, KMeans
-    scaler= MinMaxScaler(feature_range=(0, 1))
-    kmeans = KMeans(n_clusters=n_clusters,random_state=SEED)
 
     # Process data
     start_time=time.time()
-    labeled_data, scaler, kmeans=process(playlist,values,scaler,kmeans,n_clusters)
+    playlist,scaler=preprocess(playlist)
+    labeled_data, scaler, kmeans=process(playlist,values,scaler,n_clusters,SEED)
     time_process=time.time()
     print(f"Time to process: {time_process-start_time}")
     labeled_data.to_csv("out/test_full_labeled.csv", sep=";",decimal=",",index=False)
@@ -71,9 +69,7 @@ def main():
     sorted_playlists=[]
     playlist_dict=[]    
     
-    scaler_extra= MinMaxScaler(feature_range=(0, 1))
     extra_values=["Added Timestamp"]
-    scaler_extra.fit(labeled_data[extra_values])
     sort_values=values+extra_values
     for i in range(n_clusters):
         # Process each labelled song
@@ -82,11 +78,12 @@ def main():
         if len(playlist_cluster)<2:
             print(f"{i} is <2.")
             continue
-        # mean=playlist_cluster[values].mean(axis=0)
-        index_latest=np.argmax(playlist_cluster["Added At"])
-        latest=playlist_cluster.loc[index_latest,:].to_frame().transpose()
-        cluster_first=append_scalers(latest,[values,extra_values],[scaler,scaler_extra])
-        cluster_data=append_scalers(playlist_cluster,[values,extra_values],[scaler,scaler_extra])
+        mean=playlist_cluster[values].median(axis=0).to_frame().transpose()
+        mean["Added Timestamp"]=max(playlist_cluster["Added Timestamp"])
+        # index_latest=np.argmax(playlist_cluster["Added Timestamp"])
+        # latest=playlist_cluster.loc[index_latest,:].to_frame().transpose()
+        cluster_first=mean[sort_values]
+        cluster_data=playlist_cluster[sort_values]
         ith_playlist=sort_closest(playlist_cluster,cluster_first,cluster_data)
         # ith_playlist=sort_playlist(playlist_cluster,n,values,-1)
         sorted_playlists.append(ith_playlist)
@@ -109,11 +106,13 @@ def main():
 
     # Write whole thing to file
     sorted_data=pandas.concat(sorted_playlists)
-    sorted_data.to_csv("out/raw/test_full_sorted.csv", sep=";",decimal=",",index=False)
+    sorted_data.to_csv("out/test_full_sorted.csv", sep=";",decimal=",",index=False)
 
     # Sync with Spotify 
     spotify.sync_playlists(playlist_dict)
-    # print(f"Playlists created: {len(playlist_dict)}")
+    print(f"Playlists created: {len(playlist_dict)}")
+
 
 if __name__=="__main__":
     main()
+
