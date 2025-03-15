@@ -10,8 +10,8 @@ import pandas, random
 ### Predicting and creating playlist around a track
 
 # Meant for the base track or the stat you want to scale
-def scale_predict(stats,centroids_manual,scaler):
-    stats_scaled=scaler.transform(stats)
+def scale_predict(stats,centroids_manual,scaler=None):
+    stats_scaled=stats
     label = np.argmin(cdist(stats_scaled,centroids_manual),axis=1)
     return label, stats_scaled
 
@@ -52,7 +52,7 @@ def sort_closest(cluster,mean_stats_scaled,cluster_data_scaled):
 def recommend(base, song_data, centroids, values, scaler):
     label, base_stats = scale_predict(base[values],centroids,scaler)
     cluster=song_data[song_data["Label 2"]==label]
-    cluster_stats=scaler.transform(cluster[values])
+    cluster_stats=cluster[values].to_numpy()
     sorted_cluster=sort_distances(cluster,base_stats,cluster_stats)
 
     recs_playlist=pandas.concat([base,sorted_cluster])

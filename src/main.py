@@ -82,7 +82,7 @@ def main():
         mean["Added Timestamp"]=max(playlist_cluster["Added Timestamp"])
         # index_latest=np.argmax(playlist_cluster["Added Timestamp"])
         # latest=playlist_cluster.loc[index_latest,:].to_frame().transpose()
-        cluster_first=mean[sort_values]
+        cluster_first=mean
         cluster_data=playlist_cluster[sort_values]
         ith_playlist=sort_closest(playlist_cluster,cluster_first,cluster_data)
         # ith_playlist=sort_playlist(playlist_cluster,n,values,-1)
