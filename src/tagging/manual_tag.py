@@ -254,7 +254,7 @@ def group_genres_by_labeL(most_common):
 # ### Calc the best matching cluster for each song from data
 # The crust of the algorithm
 def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
-    w_song=0 #weight of song label
+    w_song=1.0 #weight of song label
     # 1. Assigns the most relevant label (column with the highest sum) to each index where the genre exists.
     label_list=[]
     index_list=[]
@@ -273,6 +273,7 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
         
         row_values=np.reshape(data_row[values].to_numpy(),(1,-1)).astype(np.float64)
         label_fuzzy=cdist(centroids,row_values)
+        label_fuzzy=np.max(label_fuzzy)-label_fuzzy
         p_new=w_song*label_fuzzy[:,0]/sum(label_fuzzy)
         # If genre exists
         if type(genre)==list:
@@ -297,6 +298,7 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
     p_new=np.zeros_like(centroids[:,0])
     for idx,row in rows.iterrows():
         label_fuzzy=cdist(centroids_manual,np.reshape(row,(1,-1)))
+        label_fuzzy=np.max(label_fuzzy)-label_fuzzy
         p_new[keys]=label_fuzzy[:,0]
         label_list[idx]+=p_new/sum(p_new)
 
