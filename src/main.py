@@ -1,14 +1,12 @@
 def main():
     import time
     import1=time.time()
-    from playlist.manager import read_csv, count_genres_in_labels, Playlist, append_scalers
+    from playlist.manager import read_csv, count_genres_in_labels
     print(f"Time to import manager: {time.time()-import1}")
     from pathlib import Path
     import2=time.time()
-    from tagging.manual_tag import preprocess, process,make_names, sort_playlist
+    from tagging.manual_tag import preprocess, process,make_names, sort_playlist, generate_sorted_playlists
     print(f"Time to import tagging: {time.time()-import2}")
-    from sklearn.cluster import KMeans
-    from sklearn.preprocessing import MinMaxScaler
     from api.spotify import SpotifyManager
     import pandas
     from recommendation.recommender import sort_distances, sort_closest
@@ -45,73 +43,46 @@ def main():
 
     # Process data
     start_time=time.time()
-    playlist,scaler=preprocess(playlist)
-    labeled_data, scaler, kmeans=process(playlist,values,scaler,n_clusters,SEED)
+    playlist=preprocess(playlist)
+    labeled_data=process(playlist,values,n_clusters,SEED)
     time_process=time.time()
     print(f"Time to process: {time_process-start_time}")
     labeled_data.to_csv("out/test_full_labeled.csv", sep=";",decimal=",",index=False)
     
 
-    ## Loop through labels and push to Spotify
+    ## Loop through labels and create playlist names, description and sorting
     # Genre stats
     start_time=time.time()
     label_to_genres,log=count_genres_in_labels(labeled_data,n_clusters,"Label 2",10000)
     time_count=time.time()
     print(f"Time to count: {time_count-start_time}")
-    # Additional saving instead of print
+    # Saving so you can see the stats for the latest version
     with open('log.txt', 'w', encoding='utf-8') as file:
         file.write(log)
 
     # Name the playlists to be saved
-    # print(type(label_to_genres[0][0]))
-    playlist_names=make_names(label_to_genres,3)
-    # param=400 # cluster approx. size
-    sorted_playlists=[]
-    playlist_dict=[]    
+    playlist_names=make_names(label_to_genres,3)    
     
     extra_values=["Added Timestamp"]
     sort_values=values+extra_values
-    for i in range(n_clusters):
-        # Process each labelled song
-        playlist_cluster=labeled_data.loc[labeled_data["Label 2"]==i].copy().reset_index()
-        # n=max(int(len(playlist_cluster)/param),2)
-        if len(playlist_cluster)<2:
-            print(f"{i} is <2.")
-            continue
-        mean=playlist_cluster[values].median(axis=0).to_frame().transpose()
-        mean["Added Timestamp"]=max(playlist_cluster["Added Timestamp"])
-        # index_latest=np.argmax(playlist_cluster["Added Timestamp"])
-        # latest=playlist_cluster.loc[index_latest,:].to_frame().transpose()
-        cluster_first=mean
-        cluster_data=playlist_cluster[sort_values]
-        ith_playlist=sort_closest(playlist_cluster,cluster_first,cluster_data)
-        # ith_playlist=sort_playlist(playlist_cluster,n,values,-1)
-        sorted_playlists.append(ith_playlist)
 
-        # Create a playlist dict with song links
-        name=f"{i:02}. {playlist_names[i]}"
-        genres_sorted=[]
-        for row in ith_playlist["Genres"]:
-            if type(row)==list:
-                for genre in row:
-                    genres_sorted.append(genre)
-        description=', '.join([l for l in pandas.unique(np.array(genres_sorted))])
-        track_links = ith_playlist["Track ID"].to_list()
-        if len(description)>300:
-            description=description[0:description.rfind(', ',0,300)]
+    sorted_playlists,playlist_dict=generate_sorted_playlists(labeled_data,playlist_names,n_clusters,sort_values,calc_first_helper)
 
-        playlist_dict.append({"name": name,"track_links": track_links, "description": description})
-        print(f"Playlist {name} length: {len(track_links)}, description: {description}")
-        print("========================================")
+    # # Write whole thing to file
+    # sorted_data=pandas.concat(sorted_playlists)
+    # sorted_data.to_csv("out/test_full_sorted.csv", sep=";",decimal=",",index=False)
 
-    # Write whole thing to file
-    sorted_data=pandas.concat(sorted_playlists)
-    sorted_data.to_csv("out/test_full_sorted.csv", sep=";",decimal=",",index=False)
+    # # Sync with Spotify 
+    # spotify.sync_playlists(playlist_dict)
+    # print(f"Playlists created: {len(playlist_dict)}")
 
-    # Sync with Spotify 
-    spotify.sync_playlists(playlist_dict)
-    print(f"Playlists created: {len(playlist_dict)}")
+def calc_first_helper(data):
+    mean=data.median(axis=0)
+    mean["Added Timestamp"]=max(data["Added Timestamp"])
+    # index_latest=np.argmax(data["Added Timestamp"])
+    # latest=data.loc[index_latest,:]
 
+    return mean
 
 if __name__=="__main__":
     main()

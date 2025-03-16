@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial.distance import cdist
-import pandas, random
+import pandas
 
 
 # %% [markdown]
@@ -26,7 +26,7 @@ def sort_distances(cluster,base_stats_scaled,cluster_data_scaled):
 # %%
 
 def sort_closest(cluster,mean_stats_scaled,cluster_data_scaled):
-
+    # Greedy nearest neighbor algorithm
     cluster.reset_index(drop=True,inplace=True)
     try:
         data=np.array(cluster_data_scaled)

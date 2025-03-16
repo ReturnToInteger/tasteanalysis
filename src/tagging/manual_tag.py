@@ -1,12 +1,13 @@
 # %%
-from playlist.manager import read_csv, split_genres, count_genres_in_labels, rotate_until, Playlist
+from playlist.manager import Playlist
 import numpy as np
 import pandas
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist
-import matplotlib.pyplot as plt
-import random
+from typing import Callable
+
+from recommendation.recommender import sort_closest
 
 # # Manual Tagging
 
@@ -151,10 +152,8 @@ def drop_below_tresh(grouped, i, genres_common):
 ## WORKFLOW
 
 def preprocess(data: pandas.DataFrame):
-    values=[]
 
     numeric_columns = data.select_dtypes(include=np.number).columns
-    print(numeric_columns)
 
     if "Duration (ms)" in numeric_columns:
         data["Duration (ms) nonscaled"]=data["Duration (ms)"]
@@ -166,9 +165,9 @@ def preprocess(data: pandas.DataFrame):
     stats_scaled=scaler.fit_transform(data[numeric_columns])
     # and replace
     data[numeric_columns]=stats_scaled
-    return data, scaler
+    return data
 
-def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,n_clusters,seed):
+def process(data: pandas.DataFrame,values:list,n_clusters:int,seed=None):
     # Cluster
     kmeans = KMeans(n_clusters=n_clusters,random_state=seed)
     kmeans.fit(data[values])
@@ -181,15 +180,14 @@ def process(data: pandas.DataFrame,values:list,scaler:MinMaxScaler,n_clusters,se
     assert len(labels) == len(genre_stats), "Mismatch in genre labels"
     genre_labels_sorted=sorted(list(tuple(zip(genre_stats.index,labels))),key=lambda x : x[1])
     genre_to_labels=group_labels_by_genre(genre_labels_sorted)
-    probabilities, most_common= calc_genre_distributions(genre_to_labels,genre_labels_sorted,n_clusters)
-    item_to_genres=group_genres_by_labeL(most_common)
+    probabilities= calc_genre_distributions(genre_to_labels,n_clusters)
     # The Matrix
     p_matrix=pandas.DataFrame(probabilities,index=genre_to_labels.keys())
 
 
     ## dealing with songs from the results
     labeled_data=train_songs(data,p_matrix,values,kmeans)
-    return labeled_data, scaler, kmeans
+    return labeled_data
 
 # %%
 # ### Fit, tranform, predict
@@ -221,9 +219,8 @@ def group_labels_by_genre(genre_labels_sorted):
     return genre_to_labels
 
 
-def calc_genre_distributions(genre_to_labels,genre_labels_sorted,n_clusters):
+def calc_genre_distributions(genre_to_labels,n_clusters):
     probabilities=np.zeros((len(genre_to_labels.keys()),n_clusters))
-    most_common={l[0]:[] for l in genre_labels_sorted}
 
     # For each genre, calculate how its items are distributed across clusters
     for idx,genre_name in enumerate(genre_to_labels):
@@ -233,12 +230,10 @@ def calc_genre_distributions(genre_to_labels,genre_labels_sorted,n_clusters):
             # cluster_counts[label]=cluster_label.count(label)
             cluster_counts[label]+=1
         probabilities[idx]=np.array(cluster_counts)/sum(cluster_counts)
-        listy=probabilities[idx]
-        most_common[genre_name]=np.argwhere(listy == np.amax(listy)).transpose()[0]
         # print(f'{key}, {most_common[key]}, {listy}')#, *(f"{value/sum(unique_values):g}" if value!=0 else "0" for value in unique_values))
-    return probabilities, most_common
+    return probabilities
 
-def group_genres_by_labeL(most_common):
+def group_genres_by_label(most_common):
     item_to_genres = {elem: [] for l in most_common for elem in most_common[l]}
     for key in most_common:
         for elem in most_common[key]:
@@ -292,8 +287,7 @@ def train_songs(data:pandas.DataFrame,p_matrix,values,kmeans:KMeans):
     group_label=data.groupby("Label 2")
     centroids_manual=group_label[values].mean()
     keys=np.array(list(group_label.groups.keys())).astype(int)
-    print(keys)
-
+    print(f"Shape of keys: {np.shape(keys)}")
     rows=data.loc[nan_list,values]
     p_new=np.zeros_like(centroids[:,0])
     for idx,row in rows.iterrows():
@@ -347,3 +341,52 @@ def sort_playlist(data,n_clusters,values,idx=None):
 
     return playlist.process2(order).songs
     
+def generate_sorted_playlists(labeled_data:pandas.DataFrame, playlist_names:list, n_clusters:int,values:list,
+                             first_function: Callable[[pandas.DataFrame | pandas.Series],pandas.DataFrame | pandas.Series]):
+    if "Label 2" not in labeled_data:
+        raise ValueError("This function requires you to pass a labeled dataset.")
+    sorted_playlists=[]
+    playlist_dict=[]
+    for i in range(n_clusters):
+        # Process each labelled song
+        playlist_cluster=labeled_data.loc[labeled_data["Label 2"]==i].copy().reset_index()
+        if len(playlist_cluster)<2:
+            print(f"{i} is <2.")
+            continue
+        cluster_first=_validate_first_func(first_function(playlist_cluster[values]),values)
+
+        cluster_data=playlist_cluster[values]
+        ith_playlist=sort_closest(playlist_cluster,cluster_first,cluster_data)
+        # ith_playlist=sort_playlist(playlist_cluster,n,values,-1)
+        sorted_playlists.append(ith_playlist)
+
+        # Create a playlist dict with song links
+        name=f"{i:02}. {playlist_names[i]}"
+        genres_sorted=[]
+        for row in ith_playlist["Genres"]:
+            if type(row)==list:
+                for genre in row:
+                    genres_sorted.append(genre)
+        description=', '.join([l for l in pandas.unique(np.array(genres_sorted))])
+        track_links = ith_playlist["Track ID"].to_list()
+        if len(description)>300:
+            description=description[0:description.rfind(', ',0,300)]
+
+        playlist_dict.append({"name": name,"track_links": track_links, "description": description})
+        print(f"Playlist {name} length: {len(track_links)}, description: {description}")
+        print("========================================")
+
+    return sorted_playlists, playlist_dict
+
+def _validate_first_func(result,values):
+    if not isinstance(result,(pandas.Series | pandas.DataFrame)):
+        raise ValueError("first_function must return a DataFrame or Series")
+    
+    if isinstance(result,pandas.Series):
+        result=result.to_frame().T
+    if list(result.columns)==values:
+        return result
+    elif list(result.index) ==values:
+        return result.T
+    else: 
+        raise ValueError("The output of first_function must have columns or index equal to 'values'.")

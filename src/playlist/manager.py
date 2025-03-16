@@ -527,10 +527,15 @@ def count_genres_in_labels(data,n,column,count_top=10):
     for i in range(n):
         g=[]
         data_filt=data.loc[data[column]==i]
-        group_labelled=data_filt.dropna(subset="Genres")
-        for genre in group_labelled["Genres"]:
-            g=g+genre
-        counter = Counter(g)
+        group_labelled=data_filt.dropna(subset=["Genres","Artist Name(s)"])
+        for _,row  in group_labelled.iterrows():
+            genres=row["Genres"]
+            artists=row["Artist Name(s)"]
+            for genre in genres:
+                g.append((genre,artists))
+        
+        unique_pairs=set(g)
+        counter = Counter([pair[0] for pair in unique_pairs])
         c="\t".join([f"({c[0]}, {c[1]})".ljust(23) for c in counter.most_common(count_top)])
         log_str+=f"{i:<2} : {len(data_filt):<3} | {c}\n"
         counted_list.append(counter.most_common(count_top))
