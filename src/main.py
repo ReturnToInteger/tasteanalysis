@@ -68,13 +68,13 @@ def main():
 
     sorted_playlists,playlist_dict=generate_sorted_playlists(labeled_data,playlist_names,n_clusters,sort_values,calc_first_helper)
 
-    # # Write whole thing to file
-    # sorted_data=pandas.concat(sorted_playlists)
-    # sorted_data.to_csv("out/test_full_sorted.csv", sep=";",decimal=",",index=False)
+    # Write whole thing to file
+    sorted_data=pandas.concat(sorted_playlists)
+    sorted_data.to_csv("out/test_full_sorted.csv", sep=";",decimal=",",index=False)
 
-    # # Sync with Spotify 
-    # spotify.sync_playlists(playlist_dict)
-    # print(f"Playlists created: {len(playlist_dict)}")
+    # Sync with Spotify 
+    spotify.sync_playlists(playlist_dict)
+    print(f"Playlists created: {len(playlist_dict)}")
 
 def calc_first_helper(data):
     mean=data.median(axis=0)
